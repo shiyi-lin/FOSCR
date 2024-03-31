@@ -13,7 +13,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
-from kmeans_pytorch import kmeans, kmeans_predict
 from progress.bar import Bar as Bar
 from scipy.optimize import linear_sum_assignment
 from sklearn import metrics
@@ -21,44 +20,44 @@ from torchvision import transforms
 from tqdm import tqdm
 
 eps = 1e-7
-# import Node
+
 class Recorder(object):
     def __init__(self, args):
         self.args = args
-        self.val_loss = {}
-        self.test_acc_all = {}
-        self.test_acc_seen = {}
-        self.test_acc_novel = {}
-        for i in range(self.args.node_num + 1):
-            self.val_loss[str(i)] = []
-            self.test_acc_all[str(i)] = []
-            self.test_acc_seen[str(i)] = []
-            self.test_acc_novel[str(i)] = []
-        self.best_acc_all = torch.zeros(self.args.node_num + 1)
-        self.get_a_better = torch.zeros(self.args.node_num + 1)
+
+        self.test_acc_all = []
+        self.test_acc_seen = []
+        self.test_acc_novel = []
+
         self.algorithm = args.algorithm
         self.round = 0
+        self.best_acc_all = 0
+        self.mean_uncert = 0
 
     def validate(self, node):
         self.round += 1
+        self.mean_uncert = test_foscr(self.args, node.test_all, node.algo, return_acc=False)
+
         all_cluster_results = test_cluster(self.args, node.test_all, node.algo, self.round)
         novel_cluster_results = test_cluster(self.args, node.test_novel, node.algo, self.round, offset=self.args.no_seen)
         test_acc_seen = test_seen(self.args, node.test_seen, node.algo, self.round)
-        self.test_acc_all[str(node.num)].append(all_cluster_results["acc"]) 
-        self.test_acc_seen[str(node.num)].append(test_acc_seen)
-        self.test_acc_novel[str(node.num)].append(novel_cluster_results['acc'])
+        
+        self.test_acc_all.append(round(all_cluster_results["acc"], 4)) 
+        self.test_acc_seen.append(round(test_acc_seen, 4))
+        self.test_acc_novel.append(round(novel_cluster_results['acc'], 4))
+        
+        if self.test_acc_all[-1] > self.best_acc_all:
+            self.best_acc_all = self.test_acc_all[-1]
 
-        if self.test_acc_all[str(node.num)][-1] > self.best_acc_all[node.num]:
-            self.get_a_better[node.num] = 1
-            self.best_acc_all[node.num] = self.test_acc_all[str(node.num)][-1]
     def printer(self, node):
 
-        print(f'test_acc_all: {self.test_acc_all[str(node.num)]}')
-        print(f'test_acc_seen: {self.test_acc_seen[str(node.num)]}')
-        print(f'test_acc_novel: {self.test_acc_novel[str(node.num)]}')
-        
+
+
+        print(f'test_acc_all: {self.test_acc_all}')
+        print(f'test_acc_seen: {self.test_acc_seen}')
+        print(f'test_acc_novel: {self.test_acc_novel}')
+
         save_path = f'saved_models/{self.algorithm}_{self.args.dataset}_{self.args.lbl_percent}_{self.args.novel_percent}_{self.args.run_started}_net_params.pth'
-    
         torch.save(node.algo.model.state_dict(), save_path)
         proj_save_path = f'saved_models/{self.algorithm}_{self.args.dataset}_{self.args.lbl_percent}_{self.args.novel_percent}_{self.args.run_started}_proj_net_params.pth'
         torch.save(node.algo.proj_layer.state_dict(), proj_save_path)
@@ -67,34 +66,24 @@ class Recorder(object):
 
     def finish(self):
         print('Finished!\n')
-        for i in range(self.args.node_num + 1):
-            print('Node{}: Best Accuracy = {:.2f}%'.format(i, self.best_acc_all[i]))
+        print('Best Accuracy = {:.2f}%'.format(self.best_acc_all))
 
 
 
-def LR_scheduler(rounds, Edge_nodes, args):
-
-    for i in range(len(Edge_nodes)):
-        Edge_nodes[i].args.lr = args.lr
-        # Edge_nodes[i].args.alpha = args.alpha
-        # Edge_nodes[i].args.beta = args.beta
-        Edge_nodes[i].optimizer.param_groups[0]['lr'] = args.lr
-    
-    print('Learning rate={:.4f}'.format(args.lr))
 
 
 def Summary(args):
-    print("Summary：\n")
+    print("Summary:\n")
     print("dataset:{}\tbatchsize:{}\n".format(args.dataset, args.batchsize))
     print("node_num:{},\tsplit:{}\n".format(args.node_num, args.split))
     print("global epochs:{},\tlocal epochs:{},\n".format(args.R, args.E))
 
 
-def accuracy(output, target, topk=(1,)):
+def accuracy_topk(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
     maxk = max(topk)
     batch_size = target.size(0)
-
+ 
     _, pred = output.topk(maxk, 1, True, True)
     pred = pred.t()
     correct = pred.eq(target.reshape(1, -1).expand_as(pred))
@@ -104,8 +93,9 @@ def accuracy(output, target, topk=(1,)):
         correct_k = correct[:k].reshape(-1).float().sum(0)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
-def accuracy_orca(output, target):
-    
+
+def accuracy(output, target):
+
     num_correct = np.sum(output == target)
     res = num_correct / len(target)
 
@@ -162,29 +152,6 @@ class AverageMeter_nf(object):
         fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
         return fmtstr.format(**self.__dict__)
 
-class WeightEMA(object):
-    def __init__(self, args, model, ema_model):
-        self.model = model
-        self.ema_model = ema_model
-        self.alpha = args.ema_decay
-        self.params = list(model.state_dict().values())
-        self.ema_params = list(ema_model.state_dict().values())
-        # self.wd = 0.02 * args.lr
-
-        for param, ema_param in zip(self.params, self.ema_params):
-            param.data.copy_(ema_param.data)
-
-    def step(self):
-        one_minus_alpha = 1.0 - self.alpha
-        for param, ema_param in zip(self.params, self.ema_params):
-            if ema_param.dtype==torch.float32:
-                ema_param.mul_(self.alpha)
-                ema_param.add_(param * one_minus_alpha)
-                # customized weight decay
-                # param.mul_(1 - self.wd)
-
-    def update(self, model):
-        self.params = list(model.state_dict().values())
 
 
 class Logger(object):
@@ -247,14 +214,14 @@ class Logger(object):
         if self.file is not None:
             self.file.close()
 
-def test(args, test_loader, model):
+def test(args, test_loader, model, return_acc=False):
     model.eval()
     preds = np.array([])
     targets = np.array([])
     confs = np.array([])
     with torch.no_grad():
         for batch_idx, (x, label) in enumerate(test_loader):
-            x, label = x.cuda(), label.cuda()
+            x, label = x.to(args.device), label.to(args.device)
             output, _ = model(x)
             prob = F.softmax(output, dim=1)
             conf, pred = prob.max(1)
@@ -266,14 +233,58 @@ def test(args, test_loader, model):
     preds = preds.astype(int)
 
     seen_mask = targets < args.no_seen
+
     unseen_mask = ~seen_mask
     overall_acc = cluster_acc(preds, targets)
-    seen_acc = accuracy_orca(preds[seen_mask], targets[seen_mask])
+    seen_acc = accuracy(preds[seen_mask], targets[seen_mask])
     unseen_acc = cluster_acc(preds[unseen_mask], targets[unseen_mask])
     unseen_nmi = metrics.normalized_mutual_info_score(targets[unseen_mask], preds[unseen_mask])
     mean_uncert = 1 - np.mean(confs)
     print('Test overall acc {:.4f}, seen acc {:.4f}, unseen acc {:.4f}, mean_uncert {:.4f}'.format(overall_acc, seen_acc, unseen_acc, mean_uncert))
-    return mean_uncert
+    
+    if return_acc:
+        return overall_acc, seen_acc, unseen_acc
+    else:
+        return mean_uncert
+
+def test_foscr(args, test_loader, algo, return_acc=False):
+    algo.model.eval()
+    preds = np.array([])
+    targets = np.array([])
+    confs = np.array([])
+    features = []
+
+    with torch.no_grad():
+        for batch_idx, (x, label) in enumerate(test_loader):
+            x, label = x.to(args.device), label.to(args.device)
+            ret_dict = algo.forward_cifar(x, None, label, evalmode=True)
+            pred = ret_dict['label_pseudo']
+            conf = ret_dict['conf']
+            feat = ret_dict['features']
+
+            targets = np.append(targets, label.cpu().numpy())
+            preds = np.append(preds, pred.cpu().numpy())
+            confs = np.append(confs, conf.cpu().numpy())
+            features.append(feat.data.cpu().numpy())
+
+    targets = targets.astype(int)
+    preds = preds.astype(int)
+
+
+    seen_mask = targets < args.no_seen
+    unseen_mask = ~seen_mask
+
+    overall_acc = cluster_acc(preds, targets)
+    seen_acc = accuracy(preds[seen_mask], targets[seen_mask])
+    unseen_acc = cluster_acc(preds[unseen_mask], targets[unseen_mask])
+    unseen_nmi = metrics.normalized_mutual_info_score(targets[unseen_mask], preds[unseen_mask])
+    mean_uncert = 1 - np.mean(confs)
+    print('Test overall acc {:.4f}, seen acc {:.4f}, unseen acc {:.4f}, mean_uncert {:.4f}'.format(overall_acc, seen_acc, unseen_acc, mean_uncert))
+    if return_acc:
+        return overall_acc, seen_acc, unseen_acc, mean_uncert
+    else:
+        return mean_uncert
+
 
 def cluster_acc(y_pred, y_true):
     """
@@ -307,47 +318,27 @@ def test_seen(args, test_loader, model, epoch):
 
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(test_loader):
-            inputs = inputs.cuda()
-            targets = targets.cuda()
-            if args.algorithm in 'ldn':
-                _, outputs = model(inputs)
-            elif args.algorithm == 'orca':
-                outputs, _ = model(inputs)
-            elif args.algorithm == 'bfm':
-               model.online_encoder.cuda()
-               model.online_predictor.cuda()
-               model.fc.cuda()
-               outputs = model.fc(model.online_predictor(model.online_encoder(inputs)))
-            elif args.algorithm == 'vic':
-                model.backbone.cuda()
-                model.fc.cuda()
-                x = model.backbone(inputs)
-                # x = x - x.mean(dim=0)
-                outputs = model.fc(x)
-            elif args.algorithm == 'opencon':
+            inputs = inputs.to(args.device)
+            targets = targets.to(args.device)
             
-                ret_dict = model.forward_cifar(inputs, None, targets, evalmode=True)
-                outputs = ret_dict['logit']
-            else:
-                outputs = model(inputs)
-            loss = F.cross_entropy(outputs, targets)
-            if args.dataset in ['chaoyang', 'octmnist', "covid19"]:
-                prec1, prec5 = accuracy(outputs, targets, topk=(1, 4))
-            else:
-                prec1, prec5 = accuracy(outputs, targets, topk=(1, 5))
-            losses.update(loss.item(), inputs.shape[0])
+        
+            ret_dict = model.forward_cifar(inputs, None, targets, evalmode=True)
+            outputs = ret_dict['logit']
+            prec1, prec5 = accuracy_topk(outputs, targets, topk=(1, 5))
+
+                
             top1.update(prec1.item(), inputs.shape[0])
             top5.update(prec5.item(), inputs.shape[0])
             batch_time.update(time.time() - end)
             end = time.time()
             if not args.no_progress:
-                test_loader.set_description("test epoch: {epoch}/{epochs:4}. itr: {batch:4}/{iter:4}. btime: {bt:.3f}s. loss: {loss:.4f}. top1: {top1:.2f}. top5: {top5:.2f}. ".format(
+                test_loader.set_description("test epoch: {epoch}/{epochs:4}. itr: {batch:4}/{iter:4}. btime: {bt:.3f}s. top1: {top1:.2f}. top5: {top5:.2f}. ".format(
                     epoch=epoch + 1,
-                    epochs=args.epochs,
+                    epochs=args.E,
                     batch=batch_idx + 1,
                     iter=len(test_loader),
                     bt=batch_time.avg,
-                    loss=losses.avg,
+                    # loss=losses.avg,
                     top1=top1.avg,
                     top5=top5.avg,
                 ))
@@ -372,28 +363,21 @@ def test_cluster(args, test_loader, model, epoch, offset=0):
         for batch_idx, (inputs, targets) in enumerate(test_loader):
             data_time.update(time.time() - end)
 
-            inputs = inputs.cuda()
-            targets = targets.cuda()
-            
+            inputs = inputs.to(args.device)
+            targets = targets.to(args.device)
+
             model.model.eval()
-            model.proj_layer.eval()
-            # _, feat = model(x)
-            # feat_proj = self.normalizer(self.proj_layer(feat))
-            # logit = feat_proj @ self.proto.data.T
-            # prob = F.softmax(logit, dim=1)
             ret_dict = model.forward_cifar(inputs, None, targets, evalmode=True)
             pred = ret_dict['label_pseudo']
-            outputs = ret_dict['logit']
 
-            _, max_idx = torch.max(outputs, dim=1)
-            predictions.extend(max_idx.cpu().numpy().tolist())
+            predictions.extend(pred.cpu().numpy().tolist())
             gt_targets.extend(targets.cpu().numpy().tolist())
             batch_time.update(time.time() - end)
             end = time.time()
             if not args.no_progress:
                 test_loader.set_description("test epoch: {epoch}/{epochs:4}. itr: {batch:4}/{iter:4}. btime: {bt:.3f}s.".format(
                     epoch=epoch + 1,
-                    epochs=args.epochs,
+                    epochs=args.E,
                     batch=batch_idx + 1,
                     iter=len(test_loader),
                     bt=batch_time.avg,
@@ -424,7 +408,6 @@ def plselect(node, args):
 
     with open(f'{args.out}/score_logger_base.txt', 'a+') as ofile:
         ofile.write(f'acc-pl: {pl_acc}, total-selected: {pl_no}\n')
-
 
 @torch.no_grad()
 def hungarian_evaluate(predictions, targets, offset=0):
@@ -565,8 +548,8 @@ def pseudo_labeling(args, data_loader, model, novel_classes, no_pl_perclass):
 
     with torch.no_grad():
         for batch_idx, (inputs, targets, indexs, _) in enumerate(data_loader):
-            inputs = inputs.cuda()
-            targets = targets.cuda()
+            inputs = inputs.to(args.device)
+            targets = targets.to(args.device)
             _, outputs = model(inputs)
             out_prob = F.softmax(outputs, dim=1)
             max_value, max_idx = torch.max(out_prob, dim=1)
@@ -761,3 +744,34 @@ def seed_torch(seed=1024):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
+
+def entropy(x, input_as_probabilities):
+    """ 
+    Helper function to compute the entropy over the batch 
+
+    input: batch w/ shape [b, num_classes]
+    output: entropy value [is ideally -log(num_classes)]
+    """
+
+    if input_as_probabilities:
+        x_ =  torch.clamp(x, min = 1e-8)
+        b =  x_ * torch.log(x_)
+    else:
+        b = F.softmax(x, dim = 1) * F.log_softmax(x, dim = 1)
+
+    if len(b.size()) == 2: # Sample-wise entropy
+        return -b.sum(dim = 1).mean()
+    elif len(b.size()) == 1: # Distribution-wise entropy
+        return - b.sum()
+    else:
+        raise ValueError('Input tensor is %d-Dimensional' %(len(b.size())))
+
+def load__labels(label_dir):
+    # image, MEL, NV, BCC, AKIEC, BKL, DF, VASC
+    labels = []
+    with open(label_dir, 'r') as f:
+        for i, line in tqdm(enumerate(f.readlines()[1:])):
+            fields = line.strip().split(',')[-1]
+            labels.append(fields)
+        labels = np.stack(labels, axis=0)
+    return labels
