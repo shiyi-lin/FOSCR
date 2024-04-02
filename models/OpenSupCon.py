@@ -117,6 +117,7 @@ class OpenSupCon(Algo):
         self.supcon_losses.update(supcon_loss.item() / supcon_pos_idxmask.sum().item(), self.args.batchsize)
         self.semicon_losses.update(semicon_loss.item() / (semicon_pos_idxmask.sum() + 1e-10).item(), self.args.batchsize)
         self.ce_sup_losses.update(loss_ce_supervised.item(), self.args.batchsize)
+        self.losses.update(cl_loss.item(), self.args.batchsize)
 
         return cl_loss
 
