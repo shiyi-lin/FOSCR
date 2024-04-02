@@ -165,7 +165,7 @@ class OpenSupCon(Algo):
         feat_proj2 = self.normalizer(self.proj_layer(feat2))
         labeled_len = len(target)
 
-        dist = feat_proj @ self.proto.data.T * 100
+        dist = feat_proj @ self.proto.data.T * 10
         dist2 = feat_proj2 @ self.proto.data.T * 10
 
         if self.args.proto_align:
