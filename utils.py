@@ -56,7 +56,9 @@ class Recorder(object):
         print(f'test_acc_all: {self.test_acc_all}')
         print(f'test_acc_seen: {self.test_acc_seen}')
         print(f'test_acc_novel: {self.test_acc_novel}')
-
+        folder_path = 'saved_models'
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
         save_path = f'saved_models/{self.algorithm}_{self.args.dataset}_{self.args.lbl_percent}_{self.args.novel_percent}_{self.args.run_started}_net_params.pth'
         torch.save(node.algo.model.state_dict(), save_path)
         proj_save_path = f'saved_models/{self.algorithm}_{self.args.dataset}_{self.args.lbl_percent}_{self.args.novel_percent}_{self.args.run_started}_proj_net_params.pth'
