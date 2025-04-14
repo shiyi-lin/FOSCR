@@ -1,5 +1,5 @@
 # FOSCR
-This repo provides an implementation of FOSCR proposed in *Facilitating Early Detection of Emerging Disease via Federated Open-World Learning*.
+This repo provides an implementation of FOSCR proposed in *From Signals to Surveillance: Leveraging Federated AI for Rapid Detection of Emerging Health Threats*.
 ## Usage
 To train on ColorectalSlides dataset, run
 
