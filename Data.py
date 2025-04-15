@@ -29,7 +29,7 @@ class Data(object):
         
         if args.dataset == "cifar10":
             args.all_class = 10
-        elif args.dataset == "nctcrc":
+        elif args.dataset == "pathmnist":
             args.all_class = 9
 
 
@@ -166,8 +166,8 @@ class _RepeatSampler(object):
 def get_dataset_class(args):
     if args.dataset == 'cifar10':
         return cifar10_dataset(args)
-    elif args.dataset == "nctcrc":
-        return nctcrc_dataset(args)
+    elif args.dataset == "pathmnist":
+        return pathmnist_dataset(args)
 
 def x_u_split_seen_novel(labels, lbl_percent, num_classes, lbl_set, unlbl_set):
     labels = np.array(labels)
@@ -239,7 +239,7 @@ class cifar10_dataset():
         test_dataset_all = CIFAR10SSL_TEST(self.data_root, train=False, transform=self.transform_val, download=False)
         return train_labeled_dataset, train_unlabeled_dataset, test_dataset_all, test_dataset_seen, test_dataset_novel
 
-class nctcrc_dataset():
+class pathmnist_dataset():
     def __init__(self, args):
         # augmentations
         self.transform_train = transforms.Compose([
@@ -282,17 +282,17 @@ class nctcrc_dataset():
         train_labeled_idxs = self.train_labeled_idxs.copy()
         train_unlabeled_idxs = self.train_unlabeled_idxs.copy()
 
-        train_labeled_dataset = nctcrcSSL(self.train_dataset, train_labeled_idxs, transform=TransformTwice(self.transform_train))
-        train_unlabeled_dataset = nctcrcSSL(self.train_dataset, train_unlabeled_idxs, transform=TransformTwice(self.transform_train))
+        train_labeled_dataset = pathmnistSSL(self.train_dataset, train_labeled_idxs, transform=TransformTwice(self.transform_train))
+        train_unlabeled_dataset = pathmnistSSL(self.train_dataset, train_unlabeled_idxs, transform=TransformTwice(self.transform_train))
 
-        test_dataset_seen = nctcrcSSL_TEST(self.test_dataset, transform=self.transform_val, labeled_set=list(range(0,self.no_seen)), all_class=self.all_class)
-        test_dataset_novel = nctcrcSSL_TEST(self.test_dataset, transform=self.transform_val, labeled_set=list(range(self.no_seen, self.all_class)), all_class=self.all_class)
-        test_dataset_all = nctcrcSSL_TEST(self.test_dataset, transform=self.transform_val, all_class=self.all_class)
+        test_dataset_seen = pathmnistSSL_TEST(self.test_dataset, transform=self.transform_val, labeled_set=list(range(0,self.no_seen)), all_class=self.all_class)
+        test_dataset_novel = pathmnistSSL_TEST(self.test_dataset, transform=self.transform_val, labeled_set=list(range(self.no_seen, self.all_class)), all_class=self.all_class)
+        test_dataset_all = pathmnistSSL_TEST(self.test_dataset, transform=self.transform_val, all_class=self.all_class)
 
         return train_labeled_dataset, train_unlabeled_dataset, test_dataset_all, test_dataset_seen, test_dataset_novel
 
 
-class nctcrcSSL(Dataset):
+class pathmnistSSL(Dataset):
     def __init__(self, train_set, indexs,
                  transform=None, target_transform=None):
 
@@ -321,7 +321,7 @@ class nctcrcSSL(Dataset):
     def __len__(self):
         return len(self.data)
 
-class nctcrcSSL_TEST(Dataset):
+class pathmnistSSL_TEST(Dataset):
     def __init__(self, test_set, 
                  transform=None, target_transform=None, labeled_set=None, all_class=10):
  

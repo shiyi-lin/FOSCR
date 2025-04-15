@@ -1,7 +1,6 @@
 import os
 from datetime import datetime
 import torch
-import wandb
 from Args import args_parser
 from Data import Data as Data
 from Node import Global_Node, Node
@@ -13,10 +12,9 @@ args.device = torch.device('cuda:'+args.seen_device if torch.cuda.is_available()
 args.use_cuda = torch.cuda.is_available()
 args.split = args.node_num
 
-args.data_root = os.path.join(args.data_root, args.dataset)
-os.makedirs(args.data_root, exist_ok=True)
+
 run_started = datetime.today().strftime('%d-%m-%y_%H%M%S')
-args.exp_name = f'dataset_{args.dataset}_algo_{args.algorithm}_lbl_percent_{args.lbl_percent}_novel_percent_{args.novel_percent}_node_num_{args.node_num}_E_{args.E}_bs_{args.batchsize}_sampler_{args.sampler}_proto_align_{args.proto_align}_clr_{args.w_simclr}_semi_{args.w_semicon}_ce_{args.w_supce}_sup_{args.w_supcon}_proto_{args.w_proto}_ent_{args.w_ent}_seed_{1024}_{run_started}'
+args.exp_name = f'dataset_{args.dataset}_algo_{args.algorithm}_lbl_percent_{args.lbl_percent}_novel_percent_{args.novel_percent}_node_num_{args.node_num}_E_{args.E}_bs_{args.batchsize}_sampler_{args.sampler}'
 args.out = os.path.join(args.out, args.exp_name)
 args.run_started = run_started
 os.makedirs(args.out, exist_ok=True)
@@ -31,7 +29,7 @@ Data = Data(args)
 Train = Trainer(args)
 recorder = Recorder(args)
 Summary(args)
-name = f'{args.dataset}_{args.algorithm}_{args.batchsize}_sampler_{args.sampler}_wce_{args.w_supce}_wsup_{args.w_supcon}_wsemi_{args.w_semicon}_wclr_{args.w_simclr}_proto_{args.w_proto}_{run_started}'
+name = f'{args.dataset}_{args.algorithm}_{args.batchsize}_sampler_{args.sampler}_wce_{args.w_supce}_wsup_{args.w_supcon}_wsemi_{args.w_semicon}'
 print('name:', name)
 
 # init nodes
