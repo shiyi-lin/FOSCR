@@ -53,7 +53,7 @@ class Node(object):
         if typ == 'l2':
             return torch.dist(m1, m2, 2)
     def fork(self, global_node):
-
+        #download global model
         self.algo = copy.deepcopy(global_node.algo)
         self.optimizer = init_optimizer(self.algo.model, self.args)
 
@@ -76,7 +76,7 @@ class Global_Node(object):
         self.losses = []
 
     def merge(self, Edge_nodes):
-     
+        #fedavg
         Node_State_List_model = [copy.deepcopy(Edge_nodes[i].algo.model.state_dict()) for i in range(len(Edge_nodes))]
         self.Dict_model = Node_State_List_model[0]
         for key in self.Dict_model.keys():
