@@ -7,7 +7,7 @@ import sys
 import time
 from shutil import get_terminal_size
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -156,65 +156,65 @@ class AverageMeter_nf(object):
 
 
 
-class Logger(object):
-    '''Save training process to log file with simple plot function.'''
-    def __init__(self, fpath, title=None, resume=False): 
-        self.file = None
-        self.resume = resume
-        self.title = '' if title == None else title
-        if fpath is not None:
-            if resume: 
-                self.file = open(fpath, 'r') 
-                name = self.file.readline()
-                self.names = name.rstrip().split('\t')
-                self.numbers = {}
-                for _, name in enumerate(self.names):
-                    self.numbers[name] = []
+# class Logger(object):
+#     '''Save training process to log file with simple plot function.'''
+#     def __init__(self, fpath, title=None, resume=False): 
+#         self.file = None
+#         self.resume = resume
+#         self.title = '' if title == None else title
+#         if fpath is not None:
+#             if resume: 
+#                 self.file = open(fpath, 'r') 
+#                 name = self.file.readline()
+#                 self.names = name.rstrip().split('\t')
+#                 self.numbers = {}
+#                 for _, name in enumerate(self.names):
+#                     self.numbers[name] = []
 
-                for numbers in self.file:
-                    numbers = numbers.rstrip().split('\t')
-                    for i in range(0, len(numbers)):
-                        self.numbers[self.names[i]].append(numbers[i])
-                self.file.close()
-                self.file = open(fpath, 'a')  
-            else:
-                self.file = open(fpath, 'w')
+#                 for numbers in self.file:
+#                     numbers = numbers.rstrip().split('\t')
+#                     for i in range(0, len(numbers)):
+#                         self.numbers[self.names[i]].append(numbers[i])
+#                 self.file.close()
+#                 self.file = open(fpath, 'a')  
+#             else:
+#                 self.file = open(fpath, 'w')
 
-    def set_names(self, names):
-        if self.resume: 
-            pass
-        # initialize numbers as empty list
-        self.numbers = {}
-        self.names = names
-        for _, name in enumerate(self.names):
-            self.file.write(name)
-            self.file.write('\t')
-            self.numbers[name] = []
-        self.file.write('\n')
-        self.file.flush()
+#     def set_names(self, names):
+#         if self.resume: 
+#             pass
+#         # initialize numbers as empty list
+#         self.numbers = {}
+#         self.names = names
+#         for _, name in enumerate(self.names):
+#             self.file.write(name)
+#             self.file.write('\t')
+#             self.numbers[name] = []
+#         self.file.write('\n')
+#         self.file.flush()
 
 
-    def append(self, numbers):
-        assert len(self.names) == len(numbers), 'Numbers do not match names'
-        for index, num in enumerate(numbers):
-            self.file.write("{0:.6f}".format(num))
-            self.file.write('\t')
-            self.numbers[self.names[index]].append(num)
-        self.file.write('\n')
-        self.file.flush()
+#     def append(self, numbers):
+#         assert len(self.names) == len(numbers), 'Numbers do not match names'
+#         for index, num in enumerate(numbers):
+#             self.file.write("{0:.6f}".format(num))
+#             self.file.write('\t')
+#             self.numbers[self.names[index]].append(num)
+#         self.file.write('\n')
+#         self.file.flush()
 
-    def plot(self, names=None):   
-        names = self.names if names == None else names
-        numbers = self.numbers
-        for _, name in enumerate(names):
-            x = np.arange(len(numbers[name]))
-            plt.plot(x, np.asarray(numbers[name]))
-        plt.legend([self.title + '(' + name + ')' for name in names])
-        plt.grid(True)
+#     def plot(self, names=None):   
+#         names = self.names if names == None else names
+#         numbers = self.numbers
+#         for _, name in enumerate(names):
+#             x = np.arange(len(numbers[name]))
+#             plt.plot(x, np.asarray(numbers[name]))
+#         plt.legend([self.title + '(' + name + ')' for name in names])
+#         plt.grid(True)
 
-    def close(self):
-        if self.file is not None:
-            self.file.close()
+#     def close(self):
+#         if self.file is not None:
+#             self.file.close()
 
 def test(args, test_loader, model, return_acc=False):
     model.eval()
@@ -466,11 +466,7 @@ def _hungarian_match(flat_preds, flat_targets, preds_k, targets_k):
     return res
 
 def getStat(train_data):
-    '''
-    Compute mean and variance for training data
-    :param train_data: 自定义类Dataset(或ImageFolder即可)
-    :return: (mean, std)
-    '''
+
     print('Compute mean and variance for training data.')
     print(len(train_data))
     train_loader = torch.utils.data.DataLoader(
@@ -598,34 +594,34 @@ def pseudo_labeling(args, data_loader, model, novel_classes, no_pl_perclass):
  
     return pseudo_label_dict, pl_eval_output["acc"], len(pseudo_idx)
 
-class GCELoss(nn.Module):
-    def __init__(self, num_classes=10, q=0.7):
-        super(GCELoss, self).__init__()
-        self.q = q
-        self.num_classes = num_classes
+# class GCELoss(nn.Module):
+#     def __init__(self, num_classes=10, q=0.7):
+#         super(GCELoss, self).__init__()
+#         self.q = q
+#         self.num_classes = num_classes
 
-    def forward(self, pred, labels):
-        pred = F.softmax(pred, dim=1)
-        pred = torch.clamp(pred, min=eps, max=1.0)
-        label_one_hot = F.one_hot(labels.long(), self.num_classes).float().to(pred.device)
-        loss = (1. - torch.pow(torch.sum(label_one_hot * pred, dim=1), self.q)) / self.q
-        return loss.mean()
+#     def forward(self, pred, labels):
+#         pred = F.softmax(pred, dim=1)
+#         pred = torch.clamp(pred, min=eps, max=1.0)
+#         label_one_hot = F.one_hot(labels.long(), self.num_classes).float().to(pred.device)
+#         loss = (1. - torch.pow(torch.sum(label_one_hot * pred, dim=1), self.q)) / self.q
+#         return loss.mean()
 
-class MarginLoss(nn.Module):
+# class MarginLoss(nn.Module):
     
-    def __init__(self, m=0.2, weight=None, s=10):
-        super(MarginLoss, self).__init__()
-        self.m = m
-        self.s = s
-        self.weight = weight
+#     def __init__(self, m=0.2, weight=None, s=10):
+#         super(MarginLoss, self).__init__()
+#         self.m = m
+#         self.s = s
+#         self.weight = weight
 
-    def forward(self, x, target):
-        index = torch.zeros_like(x, dtype=torch.uint8)
-        index.scatter_(1, target.data.view(-1, 1), 1)
-        x_m = x - self.m * self.s
+#     def forward(self, x, target):
+#         index = torch.zeros_like(x, dtype=torch.uint8)
+#         index.scatter_(1, target.data.view(-1, 1), 1)
+#         x_m = x - self.m * self.s
     
-        output = torch.where(index, x_m, x)
-        return F.cross_entropy(output, target, weight=self.weight)
+#         output = torch.where(index, x_m, x)
+#         return F.cross_entropy(output, target, weight=self.weight)
 
 
 class SimCLRTransform:

@@ -38,8 +38,8 @@ Edge_nodes = [Node(k, Data.train_labeled_loader[k], Data.train_unlabeled_loader[
 
 for rounds in range(args.R):
     print('===============The {:d}-th round==============='.format(rounds + 1))
-    if rounds in [100, 150]:
-        args.lr *= args.schw
+    # if rounds in [100, 150]:
+    #     args.lr *= args.schw
     for k in range(len(Edge_nodes)):
         print(f'----------No. {rounds+1} rounds No. {k+1} node---------------')
         

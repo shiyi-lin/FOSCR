@@ -24,7 +24,6 @@ class Algo(nn.Module):
 
         self.normalizer = lambda x: x / torch.norm(x, p=2, dim=-1, keepdim=True) + 1e-10
 
-        # self.register_buffer("proto", self.normalizer(torch.randn((self.args.proto_num, 128), dtype=torch.float)).to(args.device))
         self.register_buffer("label_stat", torch.zeros(self.args.proto_num, dtype=torch.int))
 
         self.loss_stat_init()

@@ -5,9 +5,6 @@ import torch
 from utils import AverageMeter, Bar
 import torch.nn as nn
 
-
-bce = nn.BCELoss()
-
 def train_foscr(node, args, m):
     node.algo.model.train()
     node.algo.proj_layer.train()
@@ -27,10 +24,12 @@ def train_foscr(node, args, m):
 
         x, x2, target, target_unlabeled = x.to(args.device), x2.to(args.device), target.to(args.device), target_unlabeled.to(args.device)
         node.optimizer.zero_grad()
+        #model training
         loss = node.algo.forward_cifar(x, x2, target, target_unlabeled=target_unlabeled)
         loss.backward()
 
         node.optimizer.step()
+        #prototype update
         node.algo.sync_prototype()
         end2 = time.time()
 

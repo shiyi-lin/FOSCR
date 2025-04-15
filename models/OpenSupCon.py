@@ -24,6 +24,11 @@ class OpenSupCon(Algo):
 
         self.contrast_mode = 'all'
         self.count = 0
+        self.temp_simclr = 0.4
+        self.temp_supcon = 0.1
+        self.temp_semicon = 0.7
+
+
     @torch.no_grad()
     def sync_prototype(self):
         self.proto.data = self.proto_tmp.data
@@ -88,7 +93,7 @@ class OpenSupCon(Algo):
         mask_pos_simclr = mask_pos_sm.repeat(2, 2) * mask_neg_base
         mask_neg_simclr = mask_neg_base * (simclr_neg_idxmask[:, None] * simclr_neg_idxmask[None, :])      ####### zu only
 
-        simclr_loss = self.cl_loss(cosine_dist, mask_pos_simclr, mask_neg_simclr, simclr_pos_idxmask, self.args.temp_simclr)
+        simclr_loss = self.cl_loss(cosine_dist, mask_pos_simclr, mask_neg_simclr, simclr_pos_idxmask, self.temp_simclr)
 
         ##############################  SupCon    ##############################
         mask_pos_sm =  torch.zeros(bsz, bsz).to(self.args.device)
@@ -97,7 +102,7 @@ class OpenSupCon(Algo):
         mask_pos_supcon = mask_pos_sm.repeat(2, 2) * mask_neg_base
         mask_neg_supcon = mask_neg_base * (supcon_neg_idxmask[:, None] * supcon_neg_idxmask[None, :])           ####### Zl only
 
-        supcon_loss = self.cl_loss(cosine_dist, mask_pos_supcon, mask_neg_supcon, supcon_pos_idxmask, self.args.temp_supcon)
+        supcon_loss = self.cl_loss(cosine_dist, mask_pos_supcon, mask_neg_supcon, supcon_pos_idxmask, self.temp_supcon)
        
         loss_ce_supervised = F.cross_entropy(logit[:labeled_len], target) 
         ##############################  SemiSupCon        ##############################
@@ -106,7 +111,7 @@ class OpenSupCon(Algo):
         mask_pos_semicon = mask_pos_sm.repeat(2, 2) * mask_neg_base * (semicon_pos_idxmask[:, None] * semicon_pos_idxmask[None, :])
         mask_neg_semicon = mask_neg_base * (semicon_neg_idxmask[:, None] * semicon_neg_idxmask[None, :])
 
-        semicon_loss = self.cl_loss(cosine_dist, mask_pos_semicon, mask_neg_simclr, semicon_pos_idxmask, self.args.temp_semicon)
+        semicon_loss = self.cl_loss(cosine_dist, mask_pos_semicon, mask_neg_simclr, semicon_pos_idxmask, self.temp_semicon)
 
         cl_loss = simclr_loss * self.args.w_simclr / ((simclr_pos_idxmask.sum() + 1e-10)) + \
                   supcon_loss * self.args.w_supcon / (supcon_pos_idxmask.sum())  +  \
@@ -168,20 +173,19 @@ class OpenSupCon(Algo):
         dist = feat_proj @ self.proto.data.T * 10
         dist2 = feat_proj2 @ self.proto.data.T * 10
 
-        if self.args.proto_align:
-            # self.count += 1
-            loss_protoalign = torch.tensor(0.0)
+ 
+        loss_protoalign = torch.tensor(0.0)
+        
+        if self.count > self.args.warmup_epochs:
+            loss_mse = nn.MSELoss()
+            prob = F.softmax(dist/10, dim=1)
+            conf, pred = prob.max(1)
+        
+            proto_new = torch.zeros_like(feat_proj)
             
-            if self.count > self.args.warmup_epochs:
-                loss_mse = nn.MSELoss()
-                prob = F.softmax(dist/10, dim=1)
-                conf, pred = prob.max(1)
-            
-                proto_new = torch.zeros_like(feat_proj)
-                
-                for i in range(feat_proj.shape[0]):
-                    proto_new[i, :] = self.proto[pred[i], :].data
-                loss_protoalign = loss_mse(proto_new, feat_proj)
+            for i in range(feat_proj.shape[0]):
+                proto_new[i, :] = self.proto[pred[i], :].data
+            loss_protoalign = loss_mse(proto_new, feat_proj)
 
         if labeled_len == 0:
             label_pseudo = dist[:, self.args.no_seen:].argmax(1) + self.args.no_seen
@@ -201,13 +205,10 @@ class OpenSupCon(Algo):
             q = torch.Tensor([1 - self.args.lbl_percent/100] * self.args.no_seen + [1] * (self.args.proto_num - self.args.no_seen)).to(self.args.device)
             q = q / q.sum()
             ent_loss = self.entropy(torch.softmax(dist[labeled_len:], dim=1).mean(0), q)
-            
-        if self.args.proto_align:
-            loss = cl_loss - self.args.w_ent * ent_loss + self.args.w_proto*loss_protoalign
-            self.proto_losses.update(loss_protoalign.item(), self.args.batchsize)
 
-        else:  
-            loss = cl_loss - self.args.w_ent * ent_loss
+        loss = cl_loss - self.args.w_ent * ent_loss + self.args.w_proto*loss_protoalign
+        self.proto_losses.update(loss_protoalign.item(), self.args.batchsize)
+
 
         self.update_label_stat(label_pseudo[labeled_len:])
 
